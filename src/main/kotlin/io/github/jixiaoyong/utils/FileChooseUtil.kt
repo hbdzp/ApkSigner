@@ -5,7 +5,7 @@ import java.awt.EventQueue
 import java.io.File
 import java.io.FilenameFilter
 import javax.swing.JFileChooser
-import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * @author : jixiaoyong
@@ -48,29 +48,25 @@ object FileChooseUtil {
     }
 
     /** @return 返回选择的文件夹完整路径 */
-    @OptIn(InternalCoroutinesApi::class)
     suspend fun chooseSignDirectory(
             window: ComposeWindow,
             title: String = "请选择文件夹",
             oldDirectory: String? = null
     ): String? {
-        return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-            EventQueue.invokeLater {
-                try {
-                    val jFileChooser = JFileChooser()
-                    jFileChooser.dialogTitle = title
-                    jFileChooser.currentDirectory = oldDirectory?.let { File(it) }
-                    jFileChooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-                    val result = jFileChooser.showOpenDialog(window.glassPane)
-                    if (result == JFileChooser.APPROVE_OPTION) {
-                        cont.resume(jFileChooser.selectedFile.absolutePath, null)
-                    } else {
-                        cont.resume(null, null)
-                    }
-                } catch (e: Exception) {
-                    cont.tryResumeWithException(e)
-                }
-            }
+        return onEventDispatchThread {
+            val jFileChooser = JFileChooser()
+            jFileChooser.dialogTitle = title
+            jFileChooser.currentDirectory = oldDirectory?.let { File(it) }
+            jFileChooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+            val result = jFileChooser.showOpenDialog(window.glassPane)
+            if (result == JFileChooser.APPROVE_OPTION) jFileChooser.selectedFile.absolutePath else null
         }
     }
+
+    internal suspend fun <T> onEventDispatchThread(block: () -> T): T =
+        suspendCancellableCoroutine { cont ->
+            EventQueue.invokeLater {
+                if (cont.isActive) cont.resumeWith(runCatching(block))
+            }
+        }
 }

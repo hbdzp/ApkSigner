@@ -1,10 +1,11 @@
 import io.github.jixiaoyong.beans.CommandResult
 import io.github.jixiaoyong.beans.SignType
 import kotlinx.coroutines.*
-import kotlinx.io.IOException
-import java.io.BufferedReader
+import java.io.IOException
 import java.io.File
-import java.io.InputStreamReader
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import java.util.Locale
 
 /**
  * @author : jixiaoyong
@@ -91,13 +92,19 @@ object ApkSigner {
     fun setupApkSigner(apkSignerPath: String): String? {
         // 校验文件是否为AOSP提供的apk signer，而非本APP避免误操作导致无限循环启动
         val apkSignerFile = File(apkSignerPath)
-        if (!apkSignerFile.exists()) {
+        if (!apkSignerFile.isFile) {
             return "apkSigner命令(${apkSignerPath})不存在，请重新选择。"
-        } else if (!apkSignerFile.readText().contains(AOSP_NAME)) {
+        }
+        val isAospScript = try {
+            apkSignerFile.readText().contains(AOSP_NAME)
+        } catch (e: IOException) {
+            return "无法读取apkSigner命令($apkSignerPath)：${e.message}"
+        }
+        if (!isAospScript) {
             return "apkSigner命令(${apkSignerPath})不是${AOSP_NAME}官方提供的，请重新选择。"
         }
 
-        val result = RunCommandUtil.runCommand("$apkSignerPath version", "apk signer")
+        val result = RunCommandUtil.runCommand(apkSignerPath, "version", tag = "apk signer", javaHome = javaHomePath)
 
         return if (result != null) {
             "apkSigner命令(${apkSignerPath})检查失败，请重试（${result.message}）"
@@ -108,21 +115,22 @@ object ApkSigner {
     }
 
     fun setupZipAlign(zipAlignPath: String): String? {
-        // check os is mac/linux or windows
-        val result = if (System.getProperties().getProperty("os.name").contains("Windows")) {
-            File(zipAlignPath).exists()
-            null
-        } else {
-            RunCommandUtil.runCommand("command -v $zipAlignPath", "zip align")
-        }
+        val error = checkNativeTool(zipAlignPath, "zipAlign")
+        if (error == null) zipAlignCmdPath = zipAlignPath
+        return error
+    }
 
-        return if (null != result) {
-            "zipAlign命令(${zipAlignPath})检查失败，请重试（${result.message}）"
-        } else {
-            zipAlignCmdPath = zipAlignPath
-            null
+    private fun checkNativeTool(path: String, name: String): String? {
+        val file = File(path)
+        return when {
+            !file.isFile -> "$name 命令($path)不存在或不是文件，请重新选择。"
+            !file.canExecute() -> "$name 命令($path)没有执行权限。"
+            else -> null
         }
     }
+
+    internal fun javaExecutable(javaHome: String): File =
+        File(javaHome, if (System.getProperty("os.name").contains("Windows")) "bin/java.exe" else "bin/java")
 
     /**
      * 检测 JAVA_HOME 路径是否有效，并确保它指向 JDK 目录
@@ -132,8 +140,8 @@ object ApkSigner {
             return "JAVA_HOME 路径不能为空"
         }
 
-        val javaExecutable = File(javaHome, "bin/java")
-        if (!javaExecutable.exists()) {
+        val javaExecutable = javaExecutable(javaHome)
+        if (!javaExecutable.isFile || !javaExecutable.canExecute()) {
             return "JAVA_HOME 路径无效，未找到 java 可执行文件"
         }
 
@@ -149,12 +157,10 @@ object ApkSigner {
 
         // 尝试运行 java -version 命令，检查 JDK 是否可以正常运行
         try {
-            val process = ProcessBuilder(javaExecutable.absolutePath, "-version")
-                .redirectErrorStream(true)
-                .start()
-            process.waitFor()
-            if (process.exitValue() != 0) {
-                return "JAVA_HOME 路径无效，java 命令运行失败"
+            val result = RunCommandUtil.runCommandWithResult(javaExecutable.absolutePath, "-version",
+                printLog = false, printError = false)
+            if (result is CommandResult.Error<*>) {
+                return "JAVA_HOME 路径无效，java 命令运行失败：${result.message}"
             }
         } catch (e: IOException) {
             return "JAVA_HOME 路径无效，无法运行 java 命令: ${e.message}"
@@ -165,20 +171,9 @@ object ApkSigner {
     }
 
     fun setupAapt(aaptPath: String): String? {
-        // check os is mac/linux or windows
-        val result = if (System.getProperties().getProperty("os.name").contains("Windows")) {
-            File(aaptPath).exists()
-            null
-        } else {
-            RunCommandUtil.runCommand("command -v $aaptPath", "aapt")
-        }
-
-        return if (null != result) {
-            "aapt命令(${aaptPath})检查失败，请重试（${result.message}）"
-        } else {
-            aaptCmdPath = aaptPath
-            null
-        }
+        val error = checkNativeTool(aaptPath, "aapt")
+        if (error == null) aaptCmdPath = aaptPath
+        return error
     }
 
 
@@ -186,13 +181,13 @@ object ApkSigner {
      * 获取当前apk文件的包名
      */
     suspend fun getApkPackageName(apkFilePath: String?): String? {
-        if (apkFilePath.isNullOrBlank()) {
+        if (apkFilePath.isNullOrBlank() || !::aaptCmdPath.isInitialized) {
             return null
         }
         val result = withContext(Dispatchers.IO) {
             RunCommandUtil.runCommandWithResult(
-                "$aaptPath dump badging $apkFilePath | grep 'package: name'",
-                "apk signer",
+                aaptCmdPath, "dump", "badging", apkFilePath,
+                tag = "aapt",
                 javaHome = javaHomePath
             )
         }
@@ -228,19 +223,20 @@ object ApkSigner {
         signVersions: List<SignType> = SignType.DEF_SIGN_TYPES,
         onProgress: (String) -> Unit
     ): List<CommandResult> = coroutineScope {
-        val deferredList = apkFilePathList.map {
+        val caseInsensitive = System.getProperty("os.name").let { it.contains("Windows") || it.contains("Mac") }
+        val outputs = apkFilePathList.map { path ->
+            val output = signedOutputFile(path, signedApkDirectory).absoluteFile.normalize().path
+            if (caseInsensitive) output.lowercase(Locale.ROOT) else output
+        }
+        val counts = outputs.groupingBy { it }.eachCount()
+        val deferredList = apkFilePathList.mapIndexed { index, path ->
             async {
-                alignAndSignApk(
-                    it,
-                    keyStorePath,
-                    keyAlias,
-                    keyStorePwd,
-                    keyPwd,
-                    signedApkDirectory,
-                    zipAlign,
-                    signVersions,
-                    onProgress
-                )
+                if (counts.getValue(outputs[index]) > 1) {
+                    CommandResult.Error("多个 APK 的输出文件名相同：${signedOutputFile(path, signedApkDirectory)}")
+                } else {
+                    alignAndSignApk(path, keyStorePath, keyAlias, keyStorePwd, keyPwd,
+                        signedApkDirectory, zipAlign, signVersions, onProgress)
+                }
             }
         }
 
@@ -274,124 +270,118 @@ object ApkSigner {
             return CommandResult.Error("请先初始化相关配置")
         }
 
-        val outputDirectory = signedApkDirectory ?: apkFilePath.substringBeforeLast(File.separator)
-        val outPutFilePath = outputDirectory + File.separator + apkFilePath.substringAfterLast(File.separator)
-            .replace(".apk", "_signed.apk")
-        val alignedApkFilePath = if (zipAlign) {
-            zipAlignApk(apkFilePath, onProgress = onProgress)
-        } else {
-            apkFilePath
+        val input = File(apkFilePath)
+        if (!input.isFile || !input.extension.equals("apk", ignoreCase = true)) {
+            return CommandResult.Error("APK 文件无效：$apkFilePath")
         }
-        if (alignedApkFilePath != null) {
-            try {
-                // 创建ProcessBuilder对象并设置相关属性
-                val signVersionParams = SignType.ALL_SIGN_TYPES.flatMap {
-                    arrayListOf("--v${it.type}-signing-enabled", if (signVersions.contains(it)) "true" else "false")
-                }.toTypedArray()
-                val processBuilder = RunCommandUtil.createProcessBuilder(javaHome = javaHomePath)
-                processBuilder.command(
-                    apkSignerCmdPath,
-                    "sign",
-                    "-v",
-                    "--ks",// signer 的私钥和证书链包含在给定的基于 Java 的密钥库文件中
-                    keyStorePath,
-                    "--ks-key-alias",// 表示 signer 在密钥库中的私钥和证书数据的别名的名称
-                    keyAlias,
-                    "--key-pass",// signer 私钥的密码。
-                    "pass:$keyPwd",
-                    "--ks-pass",// 包含 signer 私钥和证书的密钥库的密码。
-                    "pass:$keyStorePwd",
-                    *signVersionParams,
-                    "--out",
-                    outPutFilePath,
-                    alignedApkFilePath
-                )
-                processBuilder.redirectErrorStream(true)
+        if (signVersions.isEmpty()) return CommandResult.Error("请至少选择一种签名方式")
 
-                Logger.log(processBuilder.command().joinToString(" "))
+        var alignedFile: File? = null
+        var temporarySigned: File? = null
+        try {
+            // Query capabilities rather than sending V3/V4 flags to older build-tools.
+            val help = RunCommandUtil.runCommandWithResult(apkSignerCmdPath, "sign", "--help",
+                javaHome = javaHomePath, printLog = false, printError = false)
+            if (help !is CommandResult.Success<*>) {
+                return CommandResult.Error("无法检查 apksigner 支持的签名方式：${(help as? CommandResult.Error<*>)?.message}")
+            }
+            val supported = SignType.ALL_SIGN_TYPES.filter {
+                help.result.toString().contains("--v${it.type}-signing-enabled")
+            }
+            val unsupported = signVersions.filter { it !in supported }
+            if (unsupported.isNotEmpty()) {
+                return CommandResult.Error("当前 apksigner 不支持 ${unsupported.joinToString { it.name }}，请升级 Android SDK Build Tools 或取消对应选项。")
+            }
+            val signVersionParams = supported.flatMap {
+                listOf("--v${it.type}-signing-enabled", (it in signVersions).toString())
+            }
 
-                // 启动子进程并获取输出流
-                val process = processBuilder.start()
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-
-                // 读取输出流并打印到控制台
-                var line: String? = null
-                val totalResult = StringBuffer()
-                while (reader.readLine().also {
-                        if (null != it) {
-                            line = it
-                        }
-                    } != null) {
-                    line?.let {
-                        Logger.info(it)
-                        onProgress(it)
-                        totalResult.append(it)
-                    }
-                }
-
-                // 等待子进程结束并获取退出值
-                val exitCode = process.waitFor()
-                Logger.log("Exited with code: $exitCode")
-                return if (0 == exitCode) {
-                    CommandResult.Success(outPutFilePath)
-                } else {
-                    CommandResult.Error(totalResult.toString())
-                }
-            } catch (e: Exception) {
-                Logger.error("签名失败", e)
-                return CommandResult.Error("${e.message}", e)
-            } finally {
-                if (zipAlign) {
-                    try {
-                        File(alignedApkFilePath).delete()
-                    } catch (e: Exception) {
-                        Logger.error("删除文件失败", e)
-                    }
-                }
+            val source = if (zipAlign) {
+                val temporary = File.createTempFile("apksigner-aligned-", ".apk")
+                alignedFile = temporary
+                val result = zipAlignApk(apkFilePath, temporary.absolutePath, onProgress)
+                if (result is CommandResult.Error<*>) return result
+                temporary.absolutePath
+            } else apkFilePath
+            val output = signedOutputFile(apkFilePath, signedApkDirectory)
+            val stagedOutput = File.createTempFile(".apksigner-", ".apk", output.absoluteFile.parentFile)
+            temporarySigned = stagedOutput
+            val processBuilder = RunCommandUtil.createProcessBuilder(javaHome = javaHomePath)
+            // Only environment variable names enter the command line and logs.
+            processBuilder.environment()["APKSIGNER_STORE_PASSWORD"] = keyStorePwd
+            processBuilder.environment()["APKSIGNER_KEY_PASSWORD"] = keyPwd
+            processBuilder.command(listOf(apkSignerCmdPath, "sign", "-v", "--ks", keyStorePath,
+                "--ks-key-alias", keyAlias, "--key-pass", "env:APKSIGNER_KEY_PASSWORD",
+                "--ks-pass", "env:APKSIGNER_STORE_PASSWORD") + signVersionParams +
+                listOf("--out", stagedOutput.absolutePath, source))
+            val result = executeTool(processBuilder, onProgress)
+            if (result is CommandResult.Error<*>) return result
+            if (!stagedOutput.isFile || stagedOutput.length() == 0L) {
+                return CommandResult.Error("签名命令未生成有效的输出文件：${output.absolutePath}")
+            }
+            val stagedSidecar = File("${stagedOutput.absolutePath}.idsig")
+            if (SignType.V4 in signVersions && (!stagedSidecar.isFile || stagedSidecar.length() == 0L)) {
+                return CommandResult.Error("签名命令未生成有效的 V4 签名文件：${output.absolutePath}.idsig")
+            }
+            val outputSidecar = File("${output.absolutePath}.idsig")
+            Files.move(stagedOutput.toPath(), output.toPath(), REPLACE_EXISTING)
+            if (SignType.V4 in signVersions) {
+                Files.move(stagedSidecar.toPath(), outputSidecar.toPath(), REPLACE_EXISTING)
+            } else {
+                Files.deleteIfExists(outputSidecar.toPath())
+            }
+            return CommandResult.Success(output.absolutePath)
+        } catch (e: Exception) {
+            Logger.error("签名失败", e)
+            return CommandResult.Error("签名失败：${e.message}", e)
+        } finally {
+            alignedFile?.delete()
+            temporarySigned?.let {
+                it.delete()
+                File("${it.absolutePath}.idsig").delete()
             }
         }
-        return CommandResult.Success(outPutFilePath)
+    }
+
+    private fun signedOutputFile(apkFilePath: String, signedApkDirectory: String?): File {
+        val input = File(apkFilePath)
+        return File(signedApkDirectory ?: input.absoluteFile.parent, "${input.nameWithoutExtension}_signed.apk")
     }
 
 
     private fun zipAlignApk(
         apkFilePath: String,
-        alignedApkPath: String? = null,
+        alignedApkPath: String,
         onProgress: (String) -> Unit
-    ): String? {
-        val outPutFilePath = alignedApkPath ?: apkFilePath.replace(".apk", "_aligned.apk")
+    ): CommandResult {
+        val processBuilder = RunCommandUtil.createProcessBuilder(javaHome = javaHomePath)
+        processBuilder.command(zipAlignCmdPath, "-v", "-f", "-p", "4", apkFilePath, alignedApkPath)
+        val result = executeTool(processBuilder, onProgress)
+        if (result is CommandResult.Error<*>) return result
+        val output = File(alignedApkPath)
+        return if (output.isFile && output.length() > 0L) CommandResult.Success(alignedApkPath)
+        else CommandResult.Error("对齐命令未生成有效的输出文件：$alignedApkPath")
+    }
+
+    private fun executeTool(processBuilder: ProcessBuilder, onProgress: (String) -> Unit): CommandResult {
+        Logger.log(processBuilder.command().joinToString(" "))
+        val process = processBuilder.start()
         try {
-// 创建ProcessBuilder对象并设置相关属性
-            val processBuilder = RunCommandUtil.createProcessBuilder(javaHome = javaHomePath)
-            processBuilder.command(
-                zipAlignCmdPath,
-                "-v",
-                "-f",
-                "-p",
-                "4",
-                apkFilePath,
-                outPutFilePath
-            )
-            processBuilder.redirectErrorStream(true)
-
-// 启动子进程并获取输出流
-            val process = processBuilder.start()
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-
-// 读取输出流并打印到控制台
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                Logger.log(line)
-                line?.let { onProgress(it) }
+            val output = StringBuilder()
+            process.inputStream.bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    Logger.info(line)
+                    onProgress(line)
+                    output.append(line).append('\n')
+                }
             }
-
-// 等待子进程结束并获取退出值
             val exitCode = process.waitFor()
             Logger.log("Exited with code: $exitCode")
-        } catch (e: Exception) {
-            return null
+            return if (exitCode == 0) CommandResult.Success(output.toString())
+            else CommandResult.Error("exit code: $exitCode\n$output")
+        } finally {
+            process.destroy()
         }
-        return outPutFilePath
     }
 
     /**

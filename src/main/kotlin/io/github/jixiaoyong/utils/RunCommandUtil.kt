@@ -1,6 +1,4 @@
 import io.github.jixiaoyong.beans.CommandResult
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.io.File
 
 /**
@@ -12,34 +10,21 @@ import java.io.File
 object RunCommandUtil {
 
     /**
-     * 执行bash命令
+     * 执行程序，路径和每个参数必须分别传入（不经过 shell）。
      * @return 成功返回null，失败返回Exception类型错误原因
      */
     fun runCommand(
-        command: String,
+        vararg command: String,
         tag: String = "",
         printLog: Boolean = true,
         printError: Boolean = true,
         javaHome: String? = null
     ): Exception? {
-        val logTag = if (tag.isBlank()) "" else "$tag: "
-        Logger.info("$tag command: $command")
-
-        return try {
-            val process = createProcessBuilder(command.split("\\s+".toRegex()), javaHome).start()
-            val result = handleProcessOutput(process, logTag, printLog, printError)
-            if (result == 0) {
-                null
-            } else {
-                Exception(
-                    "${logTag}exit code: $result\n${
-                        process.inputStream.bufferedReader().readText()
-                    }\nerr:${process.errorStream.bufferedReader().readText()}"
-                )
-            }
-        } catch (e: Exception) {
-            if (printError) Logger.error("$tag error: $e")
-            e
+        return when (val result = runCommandWithResult(*command, tag = tag,
+            printLog = printLog, printError = printError, javaHome = javaHome)) {
+            is CommandResult.Success<*> -> null
+            is CommandResult.Error<*> -> Exception(result.message.toString(), result.error)
+            else -> error("Unexpected command state")
         }
     }
 
@@ -51,49 +36,29 @@ object RunCommandUtil {
         javaHome: String? = null
     ): CommandResult {
         val logTag = if (tag.isBlank()) "" else "$tag: "
-        Logger.info("$tag command: ${command.joinToString(" ")}")
+        if (printLog) Logger.info("$tag command: ${command.joinToString(" ")}")
 
+        var process: Process? = null
         return try {
-            val process = createProcessBuilder(command.toList(), javaHome).start()
-            val result = handleProcessOutput(process, logTag, printLog, printError)
-            if (result == 0) {
-                CommandResult.Success(process.inputStream.bufferedReader().readText())
+            val running = createProcessBuilder(command.toList(), javaHome).start()
+            process = running
+            // Always drain the merged stream, including when logging is disabled.
+            // Retain it here so callers never try to read an already-consumed stream.
+            val output = running.inputStream.bufferedReader().use { it.readText() }
+            val exitCode = running.waitFor()
+            if (exitCode == 0) {
+                if (printLog && output.isNotBlank()) Logger.info("$logTag$output")
+                CommandResult.Success(output)
             } else {
-                CommandResult.Error(
-                    "${logTag}exit code: $result\nerr:${
-                        process.errorStream.bufferedReader().readText()
-                    }\n${process.inputStream.bufferedReader().readText()}"
-                )
+                if (printError && output.isNotBlank()) Logger.error("$logTag$output")
+                CommandResult.Error("${logTag}exit code: $exitCode\n$output")
             }
         } catch (e: Exception) {
             if (printError) Logger.error("$tag error: $e")
             CommandResult.Error("$tag error: $e", e)
+        } finally {
+            process?.destroy()
         }
-    }
-
-    private fun handleProcessOutput(process: Process, logTag: String, printLog: Boolean, printError: Boolean): Int {
-        val logBuffer = StringBuffer()
-        val errBuffer = StringBuffer()
-
-        if (printLog) {
-            BufferedReader(InputStreamReader(process.inputStream)).useLines {
-                it.forEach { line ->
-                    Logger.info("${logTag}$line")
-                    logBuffer.append(line).append("\n")
-                }
-            }
-        }
-
-        if (printError) {
-            BufferedReader(InputStreamReader(process.errorStream)).useLines {
-                it.forEach { line ->
-                    Logger.error("${logTag}$line")
-                    errBuffer.append(line).append("\n")
-                }
-            }
-        }
-
-        return process.waitFor()
     }
 
     fun createProcessBuilder(command: List<String>? = null, javaHome: String? = null): ProcessBuilder {

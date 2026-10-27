@@ -24,10 +24,10 @@ class MainViewModel(private val settingsRepository: SettingPreferencesRepository
 
     override fun onInit() {
         viewModelScope.launch(Dispatchers.IO) {
+            settingsRepository.javaHome.first()?.let { ApkSigner.setupJavaHome(it.javaHome) }
             settingsRepository.apkSigner.first()?.let { ApkSigner.setupApkSigner(it) }
             settingsRepository.zipAlign.first()?.let { ApkSigner.setupZipAlign(it) }
             settingsRepository.aapt.first()?.let { ApkSigner.setupAapt(it) }
-            settingsRepository.javaHome.first()?.let { ApkSigner.setupJavaHome(it.javaHome) }
         }
     }
 }

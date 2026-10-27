@@ -42,6 +42,9 @@ dependencies {
     implementation(libs.jetbrains.navigation.compose)
     implementation(libs.jetbrains.lifecycle.viewmodel)
     implementation(libs.sujanpoudel.multiplatform.paths)
+
+    testImplementation(kotlin("test-junit"))
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
 }
 
 compose.desktop {

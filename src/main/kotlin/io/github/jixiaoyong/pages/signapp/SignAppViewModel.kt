@@ -145,36 +145,26 @@ class SignAppViewModel(private val settings: SettingPreferencesRepository) : Bas
     /**
      * 根据给定的 [pathList] 将给定的 [CommandResult] 列表合并为单个 [CommandResult]。
      *
-     * 如果给定的[resultList]至少包含一个[CommandResult.Success]，则返回一个[CommandResult.Success]，
-     * 其中结果是所有成功结果的串联字符串，以换行符分隔。
-     *
-     * 如果给定的[resultList]不包含[CommandResult.Success]，则返回[CommandResult.Error]，
-     * 其中结果是所有错误消息的串联字符串，以换行符分隔。
+     * 只有所有任务成功才返回 Success；失败时仍保留每个文件的结果。
      *
      * @param resultList 要合并的 [CommandResult] 列表
      * @param pathList [resultList]中每个[CommandResult]对应的路径列表
      * @return 单个 [CommandResult]，它是合并给定 [resultList] 的结果
      */
-    fun mergeCommandResult(resultList: List<CommandResult>, pathList: List<String>) =
-
-        if (resultList.filter { it is CommandResult.Success<*> }.isNotEmpty()) {
-            val message = List(resultList.size) { index ->
-                val path = pathList.getOrNull(index)
-                val result = resultList.getOrNull(index)
-                "$TITLE_CONTENT_DIVIDER\n[${index + 1}] $path\n$TITLE_CONTENT_DIVIDER\n" + (if (result is CommandResult.Error<*>) result.message.toString()
-                else (result as CommandResult.Success<*>).result.toString())
-            }.joinToString("\n\n")
-
-            CommandResult.Success(resultList.joinToString { message })
-        } else {
-            val message = List(resultList.size) { index ->
-                val path = pathList.getOrNull(index)
-                val result = resultList.getOrNull(index)
-                "$TITLE_CONTENT_DIVIDER\n[${index + 1}] $path\n$TITLE_CONTENT_DIVIDER\n" + ((result as CommandResult.Error<*>).message.toString())
-            }.joinToString("\n\n")
-
-            CommandResult.Error(message)
-        }
+    fun mergeCommandResult(resultList: List<CommandResult>, pathList: List<String>): CommandResult {
+        if (resultList.isEmpty()) return CommandResult.Error("没有可处理的文件")
+        val message = resultList.mapIndexed { index, result ->
+            val detail = when (result) {
+                is CommandResult.Success<*> -> result.result.toString()
+                is CommandResult.Error<*> -> result.message.toString()
+                CommandResult.EXECUTING -> "任务尚未完成"
+                CommandResult.NOT_EXECUT -> "任务尚未执行"
+            }
+            "$TITLE_CONTENT_DIVIDER\n[${index + 1}] ${pathList.getOrNull(index)}\n$TITLE_CONTENT_DIVIDER\n$detail"
+        }.joinToString("\n\n")
+        return if (resultList.all { it is CommandResult.Success<*> }) CommandResult.Success(message)
+        else CommandResult.Error(message)
+    }
 }
 
 data class SignAppState(

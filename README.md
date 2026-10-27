@@ -103,6 +103,8 @@ A tool for Android developers to sign their applications with GUI software.
 1.  下载源码后，使用 IDEA 打开并运行 `Main.kt` 文件即可启动图形化界面。
 2.  开发使用的 java 版本推荐 **zulu 17**。
 
+本仓库的 **Build and test** GitHub Actions 工作流会在推送、Pull Request 或手动触发时，分别测试和构建 macOS Apple Silicon、macOS Intel、Windows x64、Linux x64 安装包。构建成功后，可在对应 Actions 运行页面的 **Artifacts** 中下载 DMG、MSI 或 DEB；工作流也会上传测试报告。
+
 > 对于 windwos 用户，如果遇到`进程已结束，退出代码为 -1073741819 (0xC0000005)`，可以执行 `./gradlew run`。
 >
 > 可以在 `gradle > ApkSigner > compose desktop > run` 找到这个命令；

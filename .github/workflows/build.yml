@@ -1,0 +1,89 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS ARM64
+            runner: macos-15
+            artifact: macos-arm64
+            package: build/compose/binaries/main-release/dmg/*.dmg
+          - name: macOS Intel
+            runner: macos-15-intel
+            artifact: macos-x64
+            package: build/compose/binaries/main-release/dmg/*.dmg
+          - name: Windows x64
+            runner: windows-2025
+            artifact: windows-x64
+            package: build/compose/binaries/main-release/msi/*.msi
+          - name: Linux x64
+            runner: ubuntu-24.04
+            artifact: linux-x64
+            package: build/compose/binaries/main-release/deb/*.deb
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Set up Android SDK for integration tests
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0'
+
+      - name: Configure integration test paths
+        shell: pwsh
+        run: |
+          "APKSIGNER_TEST_BUILD_TOOLS=$(Join-Path $env:ANDROID_HOME 'build-tools/34.0.0')" >> $env:GITHUB_ENV
+          "APKSIGNER_TEST_ANDROID_JAR=$(Join-Path $env:ANDROID_HOME 'platforms/android-34/android.jar')" >> $env:GITHUB_ENV
+
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fakeroot
+
+      - name: Test and build installer
+        if: runner.os != 'Windows'
+        run: ./gradlew --no-daemon build packageReleaseDistributionForCurrentOS
+
+      - name: Test and build installer (Windows)
+        if: runner.os == 'Windows'
+        run: .\gradlew.bat --no-daemon build packageReleaseDistributionForCurrentOS
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: ApkSigner-${{ matrix.artifact }}
+          path: ${{ matrix.package }}
+          if-no-files-found: error
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.artifact }}
+          path: build/reports/tests/test/
+          if-no-files-found: ignore

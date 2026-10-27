@@ -44,7 +44,6 @@ import kotlinx.coroutines.launch
 import java.awt.Desktop
 import java.io.File
 import java.util.*
-import javax.swing.JPanel
 
 /**
  * @author : jixiaoyong
@@ -166,7 +165,6 @@ fun PageSignApp(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 DropBoxPanel(
-                    window,
                     modifier = Modifier.fillMaxWidth().height(100.dp).padding(10.dp)
                         .background(
                             color = MaterialTheme.colors.surface,
@@ -190,7 +188,6 @@ fun PageSignApp(
                                 }
                             }
                         },
-                    component = JPanel(),
                     onFileDrop = {
                         scope.launch {
                             val file = it.filter() {

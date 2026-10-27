@@ -8,6 +8,16 @@ import org.junit.Assume.assumeTrue
 
 /** Opt in with APKSIGNER_TEST_BUILD_TOOLS and APKSIGNER_TEST_ANDROID_JAR. */
 class RealApkSignerIntegrationTest {
+    @Test fun `initializes from the installed Android SDK root`() {
+        val path = System.getenv("APKSIGNER_TEST_BUILD_TOOLS")
+        assumeTrue("Android SDK integration fixtures not configured", path != null)
+        val versionDir = File(path!!)
+        assumeTrue("Fixture must be in an SDK build-tools directory", versionDir.parentFile?.name == "build-tools")
+        assertNull(ApkSigner.setupJavaHome(System.getProperty("java.home")))
+        assertNull(ApkSigner.init(versionDir.parentFile.parentFile.path))
+        assertTrue(File(ApkSigner.apkSignerPath!!).isFile)
+    }
+
     @Test fun `signs verifies and inspects a real APK`() = runTest {
         val toolsPath = System.getenv("APKSIGNER_TEST_BUILD_TOOLS")
         val androidJar = System.getenv("APKSIGNER_TEST_ANDROID_JAR")

@@ -70,6 +70,15 @@ class ApkSignerTest {
         assertEquals(File(sdk, "10.0.0/zipalign").path, ApkSigner.zipAlignPath)
     }
 
+    @Test fun `SDK root resolves its build tools version`() {
+        val versionDir = File(sdk, "build-tools/37.0.0")
+        executable(File(versionDir, "apksigner"), "echo 0.9")
+        executable(File(versionDir, "zipalign"), "exit 0")
+        executable(File(versionDir, "aapt"), "exit 0")
+        assertNull(ApkSigner.init(sdk.path))
+        assertEquals(File(versionDir, "apksigner").path, ApkSigner.apkSignerPath)
+    }
+
     @Test fun `Windows also rejects missing native tools`() {
         val actualOs = System.getProperty("os.name")
         try {

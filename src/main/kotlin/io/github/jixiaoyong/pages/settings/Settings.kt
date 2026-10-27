@@ -43,7 +43,6 @@ import io.github.jixiaoyong.utils.showToast
 import io.github.jixiaoyong.widgets.*
 import kotlinx.coroutines.launch
 import java.io.File
-import javax.swing.JPanel
 
 /**
  * @author : jixiaoyong
@@ -188,7 +187,6 @@ fun PageSettingInfo() {
             modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp).verticalScroll(rememberScrollState())
         ) {
             DropBoxPanel(
-                window,
                 modifier = Modifier.fillMaxWidth().height(100.dp).padding(10.dp)
                     .background(color = MaterialTheme.colors.surface, shape = RoundedCornerShape(10.dp)).padding(15.dp)
                     .clickable {
@@ -211,7 +209,6 @@ fun PageSettingInfo() {
                             }
                         }
                     },
-                component = JPanel(),
                 onFileDrop = {
                     scope.launch {
                         val result = viewModel.setupBuildToolsConfig(it.first())

@@ -56,8 +56,9 @@ object ApkSigner {
         val toolNames = if (windows) listOf("apksigner.bat", "zipalign.exe", "aapt.exe")
             else listOf("apksigner", "zipalign", "aapt")
         val versionPattern = Regex("\\d+(\\.\\d+)*")
+        val versionRoot = File(buildTools, "build-tools").takeIf { it.isDirectory } ?: buildTools
         val selected = if (File(buildTools, toolNames.first()).isFile) buildTools else {
-            buildTools.listFiles()?.filter { dir ->
+            versionRoot.listFiles()?.filter { dir ->
                 dir.isDirectory && versionPattern.matches(dir.name) &&
                     toolNames.all { File(dir, it).isFile }
             }?.maxWithOrNull { left, right ->

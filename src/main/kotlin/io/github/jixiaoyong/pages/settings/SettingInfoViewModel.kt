@@ -53,9 +53,9 @@ class SettingInfoViewModel(private val repository: SettingPreferencesRepository)
                     if (jdkInfo != null) {
                         jdkInfo
                     } else {
-                        val javaHomeEnv = System.getenv("JAVA_HOME")
-                        val javaVersion = getJdkVersion(javaHomeEnv)
-                        JdkInfo(javaHome = javaHomeEnv, jdkVersion = javaVersion)
+                        System.getenv("JAVA_HOME")?.takeIf { it.isNotBlank() }?.let { javaHomeEnv ->
+                            JdkInfo(javaHome = javaHomeEnv, jdkVersion = getJdkVersion(javaHomeEnv))
+                        }
                     }
                 uiStateFlow.update { it.copy(javaHome = jdkInfoData) }
             }

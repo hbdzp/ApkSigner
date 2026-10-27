@@ -55,9 +55,10 @@ internal val EnStrings = Strings(
     chooseAaptDirectory = "Please select aapt file",
     aaptDirectoryTips = "To automatically match signatures, please correctly configure the aapt file in the build-tools directory in the Android SDK",
     reset = "Reset",
-    appIntro = { version, webSite ->
+    appIntro = { version, webSite, upstream ->
         "This is a tool for local visualization of signed APKs. \nIn order to avoid leaking information such as keys, this tool will not be connected to the Internet.\n" +
-                "Current version:$version, To get the latest version, please click here to visit:$webSite"
+                "Current version:$version, To get the latest version, please click here to visit:$webSite\n" +
+                "Based on ApkSigner by JI,XIAOYONG. Original project: $upstream"
     },
     signInfoTitle = "Signature information (scroll your mouse up and down to view more)",
     checkSignFailed = { msg -> "Failed to query signature:$msg" },

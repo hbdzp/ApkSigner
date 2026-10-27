@@ -54,7 +54,7 @@ data class Strings(
     val chooseAaptDirectory: String,
     val aaptDirectoryTips: String,
     val reset: String,
-    val appIntro: (version: String, webSite: String) -> String,
+    val appIntro: (version: String, webSite: String, upstream: String) -> String,
     val signInfoTitle: String,
     val checkSignFailed: (msg: String) -> String,
     val processing: String,

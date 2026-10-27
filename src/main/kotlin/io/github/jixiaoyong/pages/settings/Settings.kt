@@ -15,6 +15,7 @@ import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
@@ -34,6 +35,7 @@ import compose.icons.fontawesomeicons.solid.*
 import io.github.jixiaoyong.BuildConfig
 import io.github.jixiaoyong.base.viewModel
 import io.github.jixiaoyong.i18n.Locale
+import io.github.jixiaoyong.i18n.Strings
 import io.github.jixiaoyong.pages.signapp.DropBoxPanel
 import io.github.jixiaoyong.utils.FileChooseUtil
 import io.github.jixiaoyong.utils.ToastConfig
@@ -53,7 +55,23 @@ import javax.swing.JPanel
  * @date : 2023/8/18
  */
 
-const val PROJECT_WEBSITE = "https://github.com/jixiaoyong/ApkSigner"
+const val PROJECT_WEBSITE = "https://github.com/hbdzp/ApkSigner"
+const val UPSTREAM_WEBSITE = "https://github.com/jixiaoyong/ApkSigner"
+
+internal fun buildSettingsIntro(strings: Strings, version: String, linkColor: Color): AnnotatedString {
+    val text = strings.appIntro(version, PROJECT_WEBSITE, UPSTREAM_WEBSITE)
+    return buildAnnotatedString {
+        append(text)
+        listOf(PROJECT_WEBSITE, UPSTREAM_WEBSITE).forEach { url ->
+            val start = text.indexOf(url)
+            if (start >= 0) {
+                val end = start + url.length
+                addStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline), start, end)
+                addStringAnnotation("URL", url, start, end)
+            }
+        }
+    }
+}
 
 @Composable
 fun PageSettingInfo() {
@@ -393,19 +411,7 @@ fun PageSettingInfo() {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
 
-                val str = i18nString.appIntro(BuildConfig.PACKAGE_VERSION, PROJECT_WEBSITE)
-                val startIndex = str.indexOf(PROJECT_WEBSITE)
-                val endIndex = startIndex + PROJECT_WEBSITE.length
-
-                val annotatedString = buildAnnotatedString {
-                    append(str)
-                    addStyle(
-                        style = SpanStyle(
-                            color = MaterialTheme.colors.primary, textDecoration = TextDecoration.Underline
-                        ), start = startIndex, end = endIndex
-                    )
-                    addStringAnnotation("URL", PROJECT_WEBSITE, startIndex, endIndex)
-                }
+                val annotatedString = buildSettingsIntro(i18nString, BuildConfig.PACKAGE_VERSION, MaterialTheme.colors.primary)
                 val uriHandler = LocalUriHandler.current
                 ClickableText(
                     text = annotatedString, style = TextStyle(

@@ -55,9 +55,10 @@ internal val ZhStrings = Strings(
     chooseAaptDirectory = "请选择aapt文件",
     aaptDirectoryTips = "若要自动匹配签名，请正确配置Android SDK中build-tools目录aapt文件",
     reset = "重置",
-    appIntro = { version, webSite ->
+    appIntro = { version, webSite, upstream ->
         "这是一个本地可视化签名APK的小工具。为了避免泄漏密钥等信息，本工具不会联网。\n" +
-                "当前版本：$version，查看最新版本请点击访问：$webSite"
+                "当前版本：$version，查看最新版本请点击访问：$webSite\n" +
+                "本项目基于 JI,XIAOYONG 的开源项目 ApkSigner 开发，原项目地址：$upstream"
     },
     signInfoTitle = "签名信息（鼠标上下滚动查看更多）",
     checkSignFailed = { msg -> "查询签名失败:$msg" },

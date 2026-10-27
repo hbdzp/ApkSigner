@@ -2,6 +2,8 @@ name: Build and test
 
 on:
   push:
+    branches: ['**']
+    tags: ['v*.*.*']
   pull_request:
   workflow_dispatch:
 
@@ -43,6 +45,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate release version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash scripts/validate-release-tag.sh "$RELEASE_TAG" build.gradle.kts
+
       - uses: actions/setup-java@v6
         with:
           distribution: zulu
@@ -64,6 +73,10 @@ jobs:
       - name: Install Linux packaging tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y fakeroot
+
+      - name: Test release asset collection
+        if: runner.os == 'Linux'
+        run: bash scripts/test-collect-release-assets.sh
 
       - name: Test and build installer
         if: runner.os != 'Windows'
@@ -87,3 +100,30 @@ jobs:
           name: test-results-${{ matrix.artifact }}
           path: build/reports/tests/test/
           if-no-files-found: ignore
+
+  release:
+    name: Publish version tag
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download installers
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: ApkSigner-*
+
+      - name: Collect installers
+        run: bash scripts/collect-release-assets.sh dist release
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash scripts/publish-release.sh "$RELEASE_TAG" "$GITHUB_REPOSITORY" release

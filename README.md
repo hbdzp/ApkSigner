@@ -51,11 +51,11 @@ GitHub Actions 会对分支推送、Pull Request 和手动触发运行跨平台�
 
 发布前，请先把 `build.gradle.kts` 中的 `packageVersion` 设置为标签对应的三段版本号，并将此修改提交。标签版本与 `packageVersion` 不一致时，工作流会停止，避免发布版本不符的安装包。
 
-例如，当前 `packageVersion` 为 `1.2.2` 时，可以在包含上述修改的提交上推送标签：
+例如，当前 `packageVersion` 为 `1.3.0` 时，可以在包含上述修改的提交上推送标签：
 
 ```bash
-git tag v1.2.2
-git push https://github.com/hbdzp/ApkSigner.git v1.2.2
+git tag v1.3.0
+git push https://github.com/hbdzp/ApkSigner.git v1.3.0
 ```
 
 ## 界面预览

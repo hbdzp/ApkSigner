@@ -51,11 +51,11 @@ GitHub Actions builds on branch pushes, pull requests and manual runs, and uploa
 
 Before tagging, set and commit `packageVersion` in `build.gradle.kts` to the matching three-part version. The workflow rejects mismatched tags to avoid publishing installers with the wrong version.
 
-For example, when `packageVersion` is `1.2.2`, push a tag pointing to the commit containing the changes:
+For example, when `packageVersion` is `1.3.0`, push a tag pointing to the commit containing the changes:
 
 ```bash
-git tag v1.2.2
-git push https://github.com/hbdzp/ApkSigner.git v1.2.2
+git tag v1.3.0
+git push https://github.com/hbdzp/ApkSigner.git v1.3.0
 ```
 
 ## Screenshots

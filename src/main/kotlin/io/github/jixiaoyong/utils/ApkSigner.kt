@@ -6,6 +6,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.util.Locale
+import java.math.BigInteger
 
 /**
  * @author : jixiaoyong
@@ -51,7 +52,24 @@ object ApkSigner {
             return "指定的Android SDK中build-tools目录无效或不存在($androidBuildToolsDir)，请重新选择。\n该目录一般为${ANDROID_BUILD_TOOLS_DIR_EXAMPLE}"
         }
 
-        val apkSignerPath = "$androidBuildToolsDir${File.separator}apksigner"
+        val windows = System.getProperty("os.name").contains("Windows")
+        val toolNames = if (windows) listOf("apksigner.bat", "zipalign.exe", "aapt.exe")
+            else listOf("apksigner", "zipalign", "aapt")
+        val versionPattern = Regex("\\d+(\\.\\d+)*")
+        val selected = if (File(buildTools, toolNames.first()).isFile) buildTools else {
+            buildTools.listFiles()?.filter { dir ->
+                dir.isDirectory && versionPattern.matches(dir.name) &&
+                    toolNames.all { File(dir, it).isFile }
+            }?.maxWithOrNull { left, right ->
+                val a = left.name.split('.').map(::BigInteger)
+                val b = right.name.split('.').map(::BigInteger)
+                (0 until maxOf(a.size, b.size)).firstNotNullOfOrNull { i ->
+                    val comparison = a.getOrElse(i) { BigInteger.ZERO }.compareTo(b.getOrElse(i) { BigInteger.ZERO })
+                    comparison.takeIf { it != 0 }
+                } ?: left.name.compareTo(right.name)
+            } ?: return "未找到完整的 Android SDK build-tools 版本，请选择包含 apksigner、zipalign 和 aapt 的版本目录，例如 $ANDROID_BUILD_TOOLS_DIR_EXAMPLE"
+        }
+        val apkSignerPath = "${selected.path}${File.separator}apksigner"
         // windows追加bat
         val apkSignerPathWithBat = if (System.getProperties().getProperty("os.name").contains("Windows")) {
             "$apkSignerPath.bat"
@@ -63,7 +81,7 @@ object ApkSigner {
             return apkSignerResult
         }
 
-        val zipAlignPath = "$androidBuildToolsDir${File.separator}zipalign"
+        val zipAlignPath = "${selected.path}${File.separator}zipalign"
         // windows追加exe
         val zipAlignPathWithExe = if (System.getProperties().getProperty("os.name").contains("Windows")) {
             "$zipAlignPath.exe"
@@ -75,7 +93,7 @@ object ApkSigner {
             return zipAlignResult
         }
 
-        val aaptPath = "$androidBuildToolsDir${File.separator}aapt"
+        val aaptPath = "${selected.path}${File.separator}aapt"
         // windows追加exe
         val aaptPathExe = if (System.getProperties().getProperty("os.name").contains("Windows")) {
             "$aaptPath.exe"

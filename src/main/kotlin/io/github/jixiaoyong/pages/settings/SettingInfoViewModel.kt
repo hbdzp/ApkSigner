@@ -133,6 +133,7 @@ class SettingInfoViewModel(private val repository: SettingPreferencesRepository)
 
     fun setupBuildToolsConfig(buildToolDir: String): String? {
         val result = ApkSigner.init(buildToolDir)
+        if (result != null) return result
         saveApkSigner(ApkSigner.apkSignerPath)
         saveZipAlign(ApkSigner.zipAlignPath)
         saveAapt(ApkSigner.aaptPath)

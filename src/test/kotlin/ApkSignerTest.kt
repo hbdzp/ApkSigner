@@ -53,6 +53,23 @@ class ApkSignerTest {
         assertNotNull(ApkSigner.setupAapt(File(directory, "missing").path))
     }
 
+    @Test fun `build tools root selects newest complete stable version numerically`() {
+        fun install(version: String, complete: Boolean = true) {
+            val dir = File(sdk, version)
+            executable(File(dir, "apksigner"), "echo 0.9")
+            executable(File(dir, "zipalign"), "exit 0")
+            if (complete) executable(File(dir, "aapt"), "exit 0")
+        }
+        install("9.0.0")
+        install("10.0.0")
+        install("11.0.0", complete = false)
+        install("12.0.0-rc1")
+
+        assertNull(ApkSigner.init(sdk.path))
+        assertEquals(File(sdk, "10.0.0/apksigner").path, ApkSigner.apkSignerPath)
+        assertEquals(File(sdk, "10.0.0/zipalign").path, ApkSigner.zipAlignPath)
+    }
+
     @Test fun `Windows also rejects missing native tools`() {
         val actualOs = System.getProperty("os.name")
         try {

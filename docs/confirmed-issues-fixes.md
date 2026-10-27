@@ -25,7 +25,7 @@
 - `build` 和 macOS DMG 打包成功；31 个测试全部通过，无失败或跳过。
 - 真实 SDK 测试动态创建 keystore 和无代码 APK，完成包名读取、对齐、签名与验签；覆盖 V1、V1+V2、V1+V2+V4，确认 V3 未启用并检查 V4 签名文件。
 - 模拟工具回归覆盖不支持的签名参数、含空格路径、环境变量密码、对齐失败、缺失输出、批量结果和目录选择异常。
-- Windows 的 Java 文件名和 native 文件不存在分支已用测试覆盖，但尚未在 Windows 系统上执行完整 `.bat` 和图形界面流程。
+- Windows GitHub Actions 已使用真实 SDK 的 `apksigner.bat` 完成签名与验签；依赖 Unix shell 的 23 个模拟工具测试在 Windows 上跳过，图形界面流程尚未实机验证。
 - GitHub Actions 工作流通过 actionlint 检查，配置了 Windows、Linux 和 macOS 两种架构的构建及真实 SDK 集成测试。
 - 构建仍有仓库原有的弃用、unchecked cast、KSP 资源提示；此次未升级构建工具链。
 
